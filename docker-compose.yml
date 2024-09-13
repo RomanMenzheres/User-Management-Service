@@ -1,0 +1,57 @@
+version: '3'
+services:
+  user-management-service-front:
+    container_name: user-management-service-front
+    build: ./user-management-service-front
+    image: user-management-service-front:latest
+    restart: unless-stopped
+    ports:
+      - $FRONT_LOCAL_PORT:$FRONT_DOCKER_PORT
+    networks:
+      - user-management-service-network
+
+  user-management-service:
+    container_name: user-management-service
+    build: ./user-management-service
+    image: user-management-service:latest
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      SPRING_APPLICATION_JSON: '{
+        "spring.datasource.url" : "jdbc:mysql://user-management-db:$MYSQLDB_DOCKER_PORT/$MYSQLDB_DATABASE",
+        "spring.datasource.username" : "$MYSQLDB_USER",
+        "spring.datasource.password" : "$MYSQLDB_ROOT_PASSWORD",
+        "spring.jpa.properties.hibernate.dialect" : "org.hibernate.dialect.MySQL8Dialect",
+        "spring.jpa.hibernate.ddl-auto" : "create-drop",
+        "spring.jpa.show-sql" : "true"
+        }'
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    ports:
+      - $SPRING_LOCAL_PORT:$SPRING_DOCKER_PORT
+      - $DEBUG_PORT:$DEBUG_PORT
+    networks:
+      - user-management-service-network
+    depends_on:
+      user-management-db:
+        condition: service_healthy
+      
+  user-management-db:
+    container_name: user-management-db
+    restart: unless-stopped
+    image: mysql:latest
+    env_file: ./.env
+    environment:
+      - MYSQL_ROOT_PASSWORD=$MYSQLDB_ROOT_PASSWORD
+      - MYSQL_DATABASE=$MYSQLDB_DATABASE
+    ports:
+      - $MYSQLDB_LOCAL_PORT:$MYSQLDB_DOCKER_PORT
+    command: --innodb-redo-log-capacity=10485760
+    networks:
+      - user-management-service-network
+    healthcheck:
+        test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+
+networks:
+  user-management-service-network:
+    name: User-management-service-network
+    driver: bridge
